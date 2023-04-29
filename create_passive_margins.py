@@ -36,6 +36,7 @@ topology_features = [pygplates.FeatureCollection(os.path.join(model_dir, file)) 
 # Continent polygon features (absolute file paths).
 continent_features = [pygplates.FeatureCollection(os.path.join(model_dir, file)) for file in (
     'shapes_continents_Merdith_et_al.gpml',
+    'shapes_cratons_Merdith_et_al.gpml',
 )]
 
 # Time range.
@@ -68,7 +69,7 @@ continent_contouring_point_spacing_degrees = 1.0
 # Note: Units here are for normalised sphere (ie, steradians or square radians) so full Earth area is 4*pi.
 #       So 0.1 covers an area of approximately 4,000,000 km^2 (ie, 0.1 * 6371^2, where Earth radius is 6371km).
 def continent_contouring_area_threshold_steradians(time):
-    return 0.1
+    return 0.001  #  ~40,000 km^2
 
 # Gaps between continent polygons smaller than this will be excluded when contouring/aggregrating blocks of continental polygons.
 #
@@ -94,6 +95,8 @@ continent_contouring = ContinentContouring(
         continent_contouring_point_spacing_degrees,
         continent_contouring_area_threshold_steradians,
         continent_contouring_gap_threshold_radians)
+
+
 # Find passive margins at the specified time.
 def find_passive_margins(time):
     print('time:', time)
