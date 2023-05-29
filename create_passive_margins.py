@@ -1,4 +1,5 @@
 from functools import partial
+import gplately
 import math
 import multiprocessing
 import numpy as np
@@ -42,7 +43,7 @@ continent_features = [pygplates.FeatureCollection(os.path.join(model_dir, file))
 # Time range.
 start_time = 0
 end_time = 1000
-time_interval = 5
+time_interval = 1
 times = np.arange(start_time, end_time + 0.5 * time_interval, time_interval)
 
 # Use all CPUs.
@@ -62,22 +63,22 @@ max_distance_of_subduction_zone_from_active_margin_kms = 200
 max_distance_of_subduction_zone_from_active_margin_radians = max_distance_of_subduction_zone_from_active_margin_kms / pygplates.Earth.mean_radius_in_kms
 
 # The grid spacing (in degrees) between points in the grid used for contouring/aggregrating blocks of continental polygons.
-continent_contouring_point_spacing_degrees = 1.0
+continent_contouring_point_spacing_degrees = 0.5
 
 # Contour polygons smaller than this will be excluded when contouring/aggregrating blocks of continental polygons.
 #
 # Note: Units here are for normalised sphere (ie, steradians or square radians) so full Earth area is 4*pi.
 #       So 0.1 covers an area of approximately 4,000,000 km^2 (ie, 0.1 * 6371^2, where Earth radius is 6371km).
-def continent_contouring_area_threshold_steradians(time):
-    return 0.001  #  ~40,000 km^2
+continent_contouring_area_threshold_steradians = 0.001  #  ~40,000 km^2
 
-# Gaps between continent polygons smaller than this will be excluded when contouring/aggregrating blocks of continental polygons.
+# The continent(s) will be expanded by a buffer of this distance (in radians) when contouring/aggregrating blocks of continental polygons.
+#
+# This also has the effect of excluding gaps between continental polygons smaller than this distance.
 #
 # Note: Units here are for normalised sphere (ie, radians).
 #       So 1.0 radian is approximately 6371 km (where Earth radius is 6371 km).
 #       Also 1.0 degree is approximately 110 km.
-def continent_contouring_gap_threshold_radians(time):
-    return math.radians(3.0)  # convert degrees to radians
+continent_contouring_buffer_and_gap_threshold_radians = math.radians(3.0)  # convert degrees to radians
 
 ###########################
 # End of input parameters #
@@ -94,7 +95,7 @@ continent_contouring = ContinentContouring(
         continent_features,
         continent_contouring_point_spacing_degrees,
         continent_contouring_area_threshold_steradians,
-        continent_contouring_gap_threshold_radians)
+        continent_contouring_buffer_and_gap_threshold_radians)
 
 
 # Find passive margins at the specified time.
@@ -102,7 +103,6 @@ def find_passive_margins(time):
     print('time:', time)
     
     passive_margin_features = []
-    contoured_features = []
     subduction_zone_features = []
     
     # Resolve the topological plate polygons for the current time.
@@ -121,15 +121,16 @@ def find_passive_margins(time):
             subduction_zone_feature.set_geometry(shared_sub_segment_lines)
             subduction_zone_feature.set_valid_time(time + 0.5 * time_interval, time - 0.5 * time_interval)
             subduction_zone_features.append(subduction_zone_feature)
-    
-    # Get the continent contours at the current time.
-    contoured_continents = continent_contouring.get_contoured_continents(time)
-    # Save contoured polygons as features (so we can later save them to a file for debugging).
-    for contoured_continent in contoured_continents:
-        contoured_feature = pygplates.Feature()
-        contoured_feature.set_geometry(contoured_continent.get_polygons())
-        contoured_feature.set_valid_time(time + 0.5 * time_interval, time - 0.5 * time_interval)
-        contoured_features.append(contoured_feature)
+
+    # Get the continent mask and the continent contours at the current time.
+    continent_mask, contoured_continents = continent_contouring.get_continent_mask_and_contoured_continents(time)
+
+    # Write out the continent mask as NetCDF.
+    #
+    continent_mask_filename = 'continent_mask_{}.nc'.format(time)
+    # Note that we need to convert the boolean mask grid to a non-boolean number type for NetCDF (and it seems floating-point for gplately).
+    continent_mask_grid = continent_mask.astype('float')
+    gplately.grids.write_netcdf_grid(continent_mask_filename, continent_mask_grid)
     
     # Find passive margins along continent contours by removing active margins (contoured segments close to a subduction zone).
     passive_margin_geometries = []
@@ -187,9 +188,6 @@ def find_passive_margins(time):
     # Save passive margins to GPML.
     pygplates.FeatureCollection(passive_margin_features).write('passive_margin_features_{}.gpml'.format(time))
 
-    # Save contoured continents to GPML (for debugging).
-    pygplates.FeatureCollection(contoured_features).write('contoured_features_{}.gpml'.format(time))
-
     # Save subducton zone segments to GPML (for debugging).
     pygplates.FeatureCollection(subduction_zone_features).write('subduction_zone_features_{}.gpml'.format(time))
 
@@ -223,7 +221,6 @@ if __name__ == '__main__':
     
     # Combine all features from each 'time'.
     passive_margin_features = []
-    contoured_features = []
     subduction_zone_features = []
     for time in times:
         passive_margin_filename = 'passive_margin_features_{}.gpml'.format(time)
@@ -231,12 +228,6 @@ if __name__ == '__main__':
         # Remove temporary file at current 'time'.
         if os.access(passive_margin_filename, os.R_OK):
             os.remove(passive_margin_filename)
-        
-        contoured_filename = 'contoured_features_{}.gpml'.format(time)
-        contoured_features.extend(pygplates.FeatureCollection(contoured_filename))
-        # Remove temporary file at current 'time'.
-        if os.access(contoured_filename, os.R_OK):
-            os.remove(contoured_filename)
         
         subduction_zone_filename = 'subduction_zone_features_{}.gpml'.format(time)
         subduction_zone_features.extend(pygplates.FeatureCollection(subduction_zone_filename))
@@ -247,8 +238,5 @@ if __name__ == '__main__':
     # Save ALL passive margins to GPML.
     pygplates.FeatureCollection(passive_margin_features).write('passive_margin_features.gpml')
 
-    # Save ALL contoured continents to GPML (for debugging).
-    pygplates.FeatureCollection(contoured_features).write('contoured_features.gpml')
-
-    # Save ALL subducton zone segments to GPML (for debugging).
+    # Save ALL subducton zone segments to GPML.
     pygplates.FeatureCollection(subduction_zone_features).write('subduction_zone_features.gpml')

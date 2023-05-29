@@ -1,3 +1,8 @@
+# NetCDF grids and GPML/cache rasters in root dir.
+/*.nc
+/*.gpml
+/*.cache
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

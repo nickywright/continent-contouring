@@ -18,6 +18,7 @@ The workflows then use these contours in different ways.
 
 The following Python packages are required:
 
+- [`gplately`](https://github.com/GPlates/gplately)
 - [`numpy`](http://numpy.org)
 - [`PlateTectonicTools`](https://github.com/EarthByte/PlateTectonicTools)
 - [`pygplates`](http://gplates.org/docs/pygplates/pygplates_getting_started.html#installation)
@@ -25,14 +26,14 @@ The following Python packages are required:
 You can install these with conda:
 
 ```
-conda create -n <conda-environment> -c conda-forge numpy platetectonictools pygplates
+conda create -n <conda-environment> -c conda-forge gplately numpy platetectonictools pygplates
 conda activate <conda-environment>
 ```
 
 ...but until version 0.5 of PlateTectonicTools is available you'll need to install `platetectonictools` from Github:
 
 ```
-conda create -n <conda-environment> -c conda-forge numpy pygplates
+conda create -n <conda-environment> -c conda-forge gplately numpy pygplates
 conda activate <conda-environment>
 conda install git pip
 pip install git+https://github.com/EarthByte/PlateTectonicTools
