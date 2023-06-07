@@ -49,7 +49,7 @@ Current workflows include:
 
 Creates passive margins through time by excluding those parts of contours that are active considered to be margins (within a threshold distance from subduction zones).
 
-To run the workflow you'll first need to copy the [Merdith et al (2021) 1Ga plate model files](https://github.sydney.edu.au/EarthByte/EarthBytePlateMotionModel-ARCHIVE/tree/master/Merdith_etal_2021_Published) into `models/Merdith_etal_2021_Published/`.
+To run the workflow you'll first need to copy the [Merdith et al (2021) 1Ga plate model files](https://www.earthbyte.org/webdav/ftp/Data_Collections/Merdith_etal_2021_ESR/SM2-Merdith_et_al_1_Ga_reconstruction_v1.1.zip) into `models/Merdith_etal_2021_Published/`.
 
 > _Note:_ You can use a different plate model by changing the parameters `rotation_features`, `topology_features` and `continent_features` to refer to files that you provide. And you can change the time range.
 
