@@ -63,22 +63,52 @@ max_distance_of_subduction_zone_from_active_margin_kms = 200
 max_distance_of_subduction_zone_from_active_margin_radians = max_distance_of_subduction_zone_from_active_margin_kms / pygplates.Earth.mean_radius_in_kms
 
 # The grid spacing (in degrees) between points in the grid used for contouring/aggregrating blocks of continental polygons.
-continent_contouring_point_spacing_degrees = 0.5
+continent_contouring_point_spacing_degrees = 0.25
 
-# Contour polygons smaller than this will be excluded when contouring/aggregrating blocks of continental polygons.
+# Optional parameter specifying area threshold (in square radians) when creating continent contours.
+#
+# Can also be a function (accepting time in Ma) and returning the area threshold.
+#
+# Contoured continents with area smaller than this threshold will be excluded.
 #
 # Note: Units here are for normalised sphere (ie, steradians or square radians) so full Earth area is 4*pi.
 #       So 0.1 covers an area of approximately 4,000,000 km^2 (ie, 0.1 * 6371^2, where Earth radius is 6371km).
-continent_contouring_area_threshold_steradians = 0.001  #  ~40,000 km^2
+continent_contouring_area_threshold_steradians = 0.0
 
-# The continent(s) will be expanded by a buffer of this distance (in radians) when contouring/aggregrating blocks of continental polygons.
+# Optional parameter specifying a distance (in radians) to expand contours ocean-ward - this also
+# ensures small gaps between continents are ignored during contouring.
 #
-# This also has the effect of excluding gaps between continental polygons smaller than this distance.
+# This parameter can also be a function (that returns the distance).
+# The function can have a single function argument: (1) accepting time (in Ma).
+# Or it can have two function arguments: (1) the first accepting time (in Ma) and (2) the second accepting the area (in steradians)
+# of the (unexpanded) contoured continent that the buffer/gap distance will apply to.
+# Hence a function with *two* arguments means a different buffer/gap distance can be specified for each contoured continent (based on its area).
+#
+# The continent(s) will be expanded by a buffer of this distance (in radians) when contouring/aggregrating blocks of continental polygons.
 #
 # Note: Units here are for normalised sphere (ie, radians).
 #       So 1.0 radian is approximately 6371 km (where Earth radius is 6371 km).
 #       Also 1.0 degree is approximately 110 km.
-continent_contouring_buffer_and_gap_threshold_radians = math.radians(3.0)  # convert degrees to radians
+def continent_contouring_buffer_and_gap_distance_radians(time, area_steradians):
+    # One distance for time interval [1000, 300] and another for time interval [250, 0].
+    # And linearly interpolate between them over the time interval [300, 250].
+    pre_pangea_distance_radians = math.radians(3.0)  # convert degrees to radians
+    post_pangea_distance_radians = math.radians(0.0)  # convert degrees to radians
+    if time > 300:
+        buffer_and_gap_distance_radians = pre_pangea_distance_radians
+    elif time < 250:
+        buffer_and_gap_distance_radians = post_pangea_distance_radians
+    else:
+        # Linearly interpolate between 250 and 300 Ma.
+        interp = float(time - 250) / (300 - 250)
+        buffer_and_gap_distance_radians = interp * pre_pangea_distance_radians + (1 - interp) * post_pangea_distance_radians
+    
+    # Linearly reduce the buffer/gap distance for contoured continents with area smaller than 1 million km^2.
+    area_threshold_steradians = 0.025  # 1 million km^2
+    if area_steradians < area_threshold_steradians:
+        buffer_and_gap_distance_radians *= area_steradians / area_threshold_steradians
+
+    return buffer_and_gap_distance_radians
 
 ###########################
 # End of input parameters #
@@ -95,7 +125,7 @@ continent_contouring = ContinentContouring(
         continent_features,
         continent_contouring_point_spacing_degrees,
         continent_contouring_area_threshold_steradians,
-        continent_contouring_buffer_and_gap_threshold_radians)
+        continent_contouring_buffer_and_gap_distance_radians)
 
 
 # Find passive margins at the specified time.
