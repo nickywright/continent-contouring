@@ -59,32 +59,51 @@ use_all_cpus = True
 # Maximum distance of an active margin from a subduction zone.
 #
 # If a contoured continent segment is near any subduction zone (ie, within this distance) then it's an active margin (ie, not a passive margin).
-max_distance_of_subduction_zone_from_active_margin_kms = 200
+max_distance_of_subduction_zone_from_active_margin_kms = 500
 max_distance_of_subduction_zone_from_active_margin_radians = max_distance_of_subduction_zone_from_active_margin_kms / pygplates.Earth.mean_radius_in_kms
 
 # The grid spacing (in degrees) between points in the grid used for contouring/aggregrating blocks of continental polygons.
 continent_contouring_point_spacing_degrees = 0.25
 
-# Optional parameter specifying area threshold (in square radians) when creating continent contours.
+# Optional parameter specifying area threshold (in square radians) for contoured continents.
+#
+# Contoured continents with area smaller than this threshold will be excluded.
+# If this parameter is not specified then no area threshold is applied.
 #
 # Can also be a function (accepting time in Ma) and returning the area threshold.
 #
-# Contoured continents with area smaller than this threshold will be excluded.
+# Note: Units here are for normalised sphere (ie, steradians or square radians) so full Earth area is 4*pi.
+#       So 0.1 covers an area of approximately 4,000,000 km^2 (ie, 0.1 * 6371^2, where Earth radius is 6371km).
+#       Conversely 4,000,000 km^2 is equivalent to (4,000,000 / 6371^2) steradians.
+continent_contouring_area_threshold_square_kms = 0
+continent_contouring_area_threshold_steradians = continent_contouring_area_threshold_square_kms / (pygplates.Earth.mean_radius_in_kms * pygplates.Earth.mean_radius_in_kms)
+
+# Optional parameter specifying area threshold (in square radians) when creating continent contours.
+#
+# Polygon contours that exclude continental crust and have an area smaller than this threshold will be excluded
+# (meaning they will now *include* continental crust, thus removing the contour).
+# This is useful for removing small holes inside continents.
+# If this parameter is not specified then no area threshold is applied.
+#
+# Can also be a function (accepting time in Ma) and returning the area threshold.
 #
 # Note: Units here are for normalised sphere (ie, steradians or square radians) so full Earth area is 4*pi.
 #       So 0.1 covers an area of approximately 4,000,000 km^2 (ie, 0.1 * 6371^2, where Earth radius is 6371km).
-continent_contouring_area_threshold_steradians = 0.0
+#       Conversely 4,000,000 km^2 is equivalent to (4,000,000 / 6371^2) steradians.
+continent_exclusion_area_threshold_square_kms = 100000
+continent_exclusion_area_threshold_steradians = continent_exclusion_area_threshold_square_kms / (pygplates.Earth.mean_radius_in_kms * pygplates.Earth.mean_radius_in_kms)
 
 # Optional parameter specifying a distance (in radians) to expand contours ocean-ward - this also
 # ensures small gaps between continents are ignored during contouring.
+#
+# The continent(s) will be expanded by a buffer of this distance (in radians) when contouring/aggregrating blocks of continental polygons.
+# If this parameter is not specified then buffer expansion is not applied.
 #
 # This parameter can also be a function (that returns the distance).
 # The function can have a single function argument: (1) accepting time (in Ma).
 # Or it can have two function arguments: (1) the first accepting time (in Ma) and (2) the second accepting the area (in steradians)
 # of the (unexpanded) contoured continent that the buffer/gap distance will apply to.
 # Hence a function with *two* arguments means a different buffer/gap distance can be specified for each contoured continent (based on its area).
-#
-# The continent(s) will be expanded by a buffer of this distance (in radians) when contouring/aggregrating blocks of continental polygons.
 #
 # Note: Units here are for normalised sphere (ie, radians).
 #       So 1.0 radian is approximately 6371 km (where Earth radius is 6371 km).
@@ -104,7 +123,8 @@ def continent_contouring_buffer_and_gap_distance_radians(time, area_steradians):
         buffer_and_gap_distance_radians = interp * pre_pangea_distance_radians + (1 - interp) * post_pangea_distance_radians
     
     # Linearly reduce the buffer/gap distance for contoured continents with area smaller than 1 million km^2.
-    area_threshold_steradians = 0.025  # 1 million km^2
+    area_threshold_square_kms = 1000000
+    area_threshold_steradians = area_threshold_square_kms / (pygplates.Earth.mean_radius_in_kms * pygplates.Earth.mean_radius_in_kms)
     if area_steradians < area_threshold_steradians:
         buffer_and_gap_distance_radians *= area_steradians / area_threshold_steradians
 
@@ -125,7 +145,8 @@ continent_contouring = ContinentContouring(
         continent_features,
         continent_contouring_point_spacing_degrees,
         continent_contouring_area_threshold_steradians,
-        continent_contouring_buffer_and_gap_distance_radians)
+        continent_contouring_buffer_and_gap_distance_radians,
+        continent_exclusion_area_threshold_steradians)
 
 
 # Find passive margins at the specified time.
