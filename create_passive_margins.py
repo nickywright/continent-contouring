@@ -175,7 +175,8 @@ def find_passive_margins(
             # Also save subduction zone lines as features (so we can later save them to a file for debugging).
             subduction_zone_feature = pygplates.Feature()
             subduction_zone_feature.set_geometry(shared_sub_segment_lines)
-            subduction_zone_feature.set_valid_time(time + 0.5 * time_interval, time - 0.5 * time_interval)
+            subduction_zone_feature.set_valid_time(time + 0.5 * time_interval - 1e-4,  # epsilon to avoid overlap at interval boundaries
+                                                   time - 0.5 * time_interval)
             subduction_zone_features.append(subduction_zone_feature)
 
     # Get the continent mask and the continent contours at the current time.
@@ -201,7 +202,8 @@ def find_passive_margins(
     for passive_margin_geometry in passive_margin_geometries:
         passive_margin_feature = pygplates.Feature()
         passive_margin_feature.set_geometry(passive_margin_geometry)
-        passive_margin_feature.set_valid_time(time + 0.5 * time_interval, time - 0.5 * time_interval)
+        passive_margin_feature.set_valid_time(time + 0.5 * time_interval - 1e-4,  # epsilon to avoid overlap at interval boundaries
+                                              time - 0.5 * time_interval)
         passive_margin_features.append(passive_margin_feature)
 
     # Save passive margins to GPML.
