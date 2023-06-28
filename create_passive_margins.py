@@ -101,14 +101,15 @@ continent_exclusion_area_threshold_steradians = continent_exclusion_area_thresho
 #
 # This parameter can also be a function (that returns the distance).
 # The function can have a single function argument: (1) accepting time (in Ma).
-# Or it can have two function arguments: (1) the first accepting time (in Ma) and (2) the second accepting the area (in steradians)
+# Or it can have two function arguments: (1) the first accepting time (in Ma) and
+# (2) the second accepting the contoured continent (a 'ptt.continent_contours.ContouredContinent' object)
 # of the (unexpanded) contoured continent that the buffer/gap distance will apply to.
-# Hence a function with *two* arguments means a different buffer/gap distance can be specified for each contoured continent (based on its area).
+# Hence a function with *two* arguments means a different buffer/gap distance can be specified for each contoured continent (eg, based on its area).
 #
 # Note: Units here are for normalised sphere (ie, radians).
 #       So 1.0 radian is approximately 6371 km (where Earth radius is 6371 km).
 #       Also 1.0 degree is approximately 110 km.
-def continent_contouring_buffer_and_gap_distance_radians(time, area_steradians):
+def continent_contouring_buffer_and_gap_distance_radians(time, contoured_continent):
     # One distance for time interval [1000, 300] and another for time interval [250, 0].
     # And linearly interpolate between them over the time interval [300, 250].
     pre_pangea_distance_radians = math.radians(3.0)  # convert degrees to radians
@@ -122,6 +123,9 @@ def continent_contouring_buffer_and_gap_distance_radians(time, area_steradians):
         interp = float(time - 250) / (300 - 250)
         buffer_and_gap_distance_radians = interp * pre_pangea_distance_radians + (1 - interp) * post_pangea_distance_radians
     
+    # Area of the contoured continent.
+    area_steradians = contoured_continent.get_area()
+
     # Linearly reduce the buffer/gap distance for contoured continents with area smaller than 1 million km^2.
     area_threshold_square_kms = 1000000
     area_threshold_steradians = area_threshold_square_kms / (pygplates.Earth.mean_radius_in_kms * pygplates.Earth.mean_radius_in_kms)
@@ -150,7 +154,8 @@ continent_contouring = ContinentContouring(
 
 
 # Find passive margins at the specified time.
-def find_passive_margins(time):
+def find_passive_margins(
+        time):
     print('time:', time)
     
     passive_margin_features = []
@@ -186,48 +191,11 @@ def find_passive_margins(time):
     # Find passive margins along continent contours by removing active margins (contoured segments close to a subduction zone).
     passive_margin_geometries = []
     for contoured_continent in contoured_continents:
-        for contoured_continent_polygon in contoured_continent.get_polygons():
-            # Points for the current passive margin (if one).
-            passive_margin_adjacent_points = []
-            
-            # Iterate over great circle arc segments of current contoured polygon.
-            for contoured_continent_segment in contoured_continent_polygon.get_segments():
-                # Create a polyline from the current contoured segment (so we can do distance testing).
-                contoured_continent_line_segment = pygplates.PolylineOnSphere((
-                    contoured_continent_segment.get_start_point(),
-                    contoured_continent_segment.get_end_point()))
-                
-                # If continent segment near any subduction zone then it's an active margin.
-                is_active_margin = False
-                for subduction_zone_line in subduction_zone_lines:
-                    # If distance less than threshold distance.
-                    if pygplates.GeometryOnSphere.distance(
-                            contoured_continent_line_segment, subduction_zone_line, max_distance_of_subduction_zone_from_active_margin_radians) is not None:
-                        is_active_margin = True
-                        break  # skip remaining subduction zones
-                
-                # If it's not an active margin then it's a passive margin.
-                is_passive_margin = not is_active_margin
-                
-                # If segment a passive margin then add segment to current passive margin.
-                if is_passive_margin:
-                    if not passive_margin_adjacent_points:
-                        # Add segment start point for first segment.
-                        passive_margin_adjacent_points.append(contoured_continent_line_segment[0])
-                    # Add segment end point.
-                    passive_margin_adjacent_points.append(contoured_continent_line_segment[1])
-                else:  # active margin
-                    if passive_margin_adjacent_points:
-                        # We have accumulated passive margin points but are now in an active margin, so submit a passive margin.
-                        passive_margin_geometries.append(
-                            pygplates.PolylineOnSphere(passive_margin_adjacent_points))
-                        # Clear points for next passive margin geometry
-                        del passive_margin_adjacent_points[:]
-            
-            # If there's one last passive margin geometry in the current contoured polygon then submit it.
-            if passive_margin_adjacent_points:
-                passive_margin_geometries.append(
-                    pygplates.PolylineOnSphere(passive_margin_adjacent_points))
+        for contour_polyline in contoured_continent.get_contours():
+            # Add any passive margins found on the current contour.
+            _find_passive_margin_geometries_on_contour(passive_margin_geometries,
+                                                       subduction_zone_lines,
+                                                       contour_polyline.get_segments())
     
     # Convert any passive margin geometries found into features.
     for passive_margin_geometry in passive_margin_geometries:
@@ -241,6 +209,54 @@ def find_passive_margins(time):
 
     # Save subducton zone segments to GPML (for debugging).
     pygplates.FeatureCollection(subduction_zone_features).write('subduction_zone_features_{}.gpml'.format(time))
+
+
+def _find_passive_margin_geometries_on_contour(
+        passive_margin_geometries,
+        subduction_zone_lines,
+        contoured_continent_segments):
+    
+    # Points for the current passive margin (if one).
+    passive_margin_adjacent_points = []
+    
+    # Iterate over great circle arc segments of the contour.
+    for contoured_continent_segment in contoured_continent_segments:
+        # Create a polyline from the current contoured segment (so we can do distance testing).
+        contoured_continent_line_segment = pygplates.PolylineOnSphere((
+            contoured_continent_segment.get_start_point(),
+            contoured_continent_segment.get_end_point()))
+        
+        # If continent segment near any subduction zone then it's an active margin.
+        is_active_margin = False
+        for subduction_zone_line in subduction_zone_lines:
+            # If distance less than threshold distance.
+            if pygplates.GeometryOnSphere.distance(
+                    contoured_continent_line_segment, subduction_zone_line, max_distance_of_subduction_zone_from_active_margin_radians) is not None:
+                is_active_margin = True
+                break  # skip remaining subduction zones
+        
+        # If it's not an active margin then it's a passive margin.
+        is_passive_margin = not is_active_margin
+        
+        # If segment a passive margin then add segment to current passive margin.
+        if is_passive_margin:
+            if not passive_margin_adjacent_points:
+                # Add segment start point for first segment.
+                passive_margin_adjacent_points.append(contoured_continent_line_segment[0])
+            # Add segment end point.
+            passive_margin_adjacent_points.append(contoured_continent_line_segment[1])
+        else:  # active margin
+            if passive_margin_adjacent_points:
+                # We have accumulated passive margin points but are now in an active margin, so submit a passive margin.
+                passive_margin_geometries.append(
+                    pygplates.PolylineOnSphere(passive_margin_adjacent_points))
+                # Clear points for next passive margin geometry
+                del passive_margin_adjacent_points[:]
+    
+    # If there's one last passive margin geometry in the current contour then submit it.
+    if passive_margin_adjacent_points:
+        passive_margin_geometries.append(
+            pygplates.PolylineOnSphere(passive_margin_adjacent_points))
 
 
 if __name__ == '__main__':
