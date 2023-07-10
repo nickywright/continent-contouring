@@ -93,7 +93,6 @@ continent_contouring_area_threshold_steradians = continent_contouring_area_thres
 continent_exclusion_area_threshold_square_kms = 800000
 continent_exclusion_area_threshold_steradians = continent_exclusion_area_threshold_square_kms / (pygplates.Earth.mean_radius_in_kms * pygplates.Earth.mean_radius_in_kms)
 
-# Optional parameter specifying the maximum distance threshold (in radians) for separating continents.
 # Optional parameter specifying the distance threshold (in radians) above which continents are separated.
 #
 # Any continent polygons separated by a distance that is less than this threshold will become part of the same continent.
