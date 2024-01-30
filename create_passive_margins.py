@@ -21,6 +21,9 @@ rotation_features = [pygplates.FeatureCollection(os.path.join(model_dir, file)) 
     '1000_0_rotfile_Merdith_et_al.rot',
 )]
 
+# The reference frame to generate the output files relative to.
+anchor_plate_id = 0
+
 # Topology features (absolute file paths).
 #
 # Only include those GPML files that are used for topologies.
@@ -155,7 +158,7 @@ def continent_contouring_buffer_and_gap_distance_radians(time, contoured_contine
 
 
 # Rotation model.
-rotation_model = pygplates.RotationModel(rotation_features)
+rotation_model = pygplates.RotationModel(rotation_features, default_anchor_plate_id=anchor_plate_id)
 
 # Create a ContinentContouring object.
 continent_contouring = continent_contours.ContinentContouring(
