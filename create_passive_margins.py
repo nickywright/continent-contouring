@@ -1,3 +1,6 @@
+# To run this script: python create_passive_margins.py <path to yaml file>
+
+
 from functools import partial
 import gplately
 import math
@@ -6,47 +9,119 @@ import numpy as np
 import os
 import os.path
 import pygplates
-from ptt import continent_contours
+from gplately.ptt import continent_contours
+import sys
 
+from datetime import datetime
+import yaml
+try:
+    from yaml import Cloader as Loader
+except ImportError:
+    from yaml import Loader
+
+# 2024-05-09: Modified this script to be compatible with a yaml file and output to user specified location (NW)
+
+# +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# ------------------------------------------
+# --- Set paths and various parameters
+# ------------------------------------------
+today = datetime.today().strftime('%Y%m%d')
+
+try:
+    config_file = sys.argv[1]
+    print("*** Parameters set from %s ***" % config_file)
+    with open(config_file) as f:
+        PARAMS = yaml.load(f, Loader=Loader)
+
+    # ------------------------------------------
+    # --- Set directories and input files ------
+    model_name = PARAMS["InputFiles"]["model_name"]
+    paleobathymetry_main_output_dir = PARAMS["OutputFiles"]["paleobathymetry_main_output_dir"]
+    include_date_in_output_dir = PARAMS["OutputFiles"]["include_date_in_output_dir"]
+    date = PARAMS["OutputFiles"]["date"]
+
+    sediment_thickness_output_dir = PARAMS["OutputFiles"]["sediment_thickness_output_dir"]
+    sediment_thickness_within_main_output_dir = PARAMS["OutputFiles"]["sediment_thickness_within_main_output_dir"]
+
+    # --- agegrids
+    agegrid_dir = PARAMS["InputFiles"]["agegrid_dir"]
+    agegrid_filename = PARAMS["InputFiles"]["agegrid_filename"]
+    agegrid_filename_ext = PARAMS["InputFiles"]["agegrid_filename_ext"]
+
+    # --- input file
+    proximity_features_files = [PARAMS["InputFiles"]["sediment_thickness_features"]]
+
+    # --- Plate model files
+    plate_model_dir = PARAMS["InputFiles"]["model_dir"]
+    rotation_filenames = [os.path.join(plate_model_dir, i) for i in PARAMS['InputFiles']['rotation_files']]
+    topology_filenames = [os.path.join(plate_model_dir, i) for i in PARAMS['InputFiles']['topology_files']]
+    coastline_filename = '%s/%s' % (plate_model_dir, PARAMS['InputFiles']['coastline_file'])
+    
+    continents_file = '%s/%s' % (plate_model_dir, PARAMS['InputFiles']['continents_file'])
+    cratons_file = '%s/%s' % (plate_model_dir, PARAMS['InputFiles']['cratons_file'])
+
+    anchor_plate_id = PARAMS["InputFiles"]["anchor_plate_id"]
+
+    # --- grid spacing
+    grid_spacing = PARAMS["GridParameters"]["grid_spacing"]
+    lon_min = PARAMS["GridParameters"]["lon_min"]
+    lon_max = PARAMS["GridParameters"]["lon_max"]
+    lat_min = PARAMS["GridParameters"]["lat_min"]
+    lat_max = PARAMS["GridParameters"]["lat_max"]
+
+    # --- time parameters
+    min_time = int(PARAMS["TimeParameters"]["time_min"])           # Not truly a min_time, - parts 1 and 3 require a 0 Ma shapefile
+    # oldest time to reconstruct to (will default to 0 Ma for min time)
+    max_time = int(PARAMS["TimeParameters"]["time_max"])
+    time_step = int(PARAMS["TimeParameters"]["time_step"])      # Myrs to increment age by in loop
+    
+    # running parameters
+    num_cpus = PARAMS["Parameters"]["number_of_cpus"] # number of cpus to use. Reduce if required!
+    max_memory_usage_in_gb = PARAMS["Parameters"]["max_memory_usage_in_gb_sedthickness"]
+
+except IndexError:
+    print('*** No yaml file given. Make sure you specify it ***')
+
+# ------------------------------
+# --- base output directory
+if include_date_in_output_dir.lower() in ['true', '1', 't', 'y', 'yes']:
+    if date == 'today':
+        date = today
+        paleobathymetry_main_output_dir = '%s/%s' % (paleobathymetry_main_output_dir, date)
+    else:
+        paleobathymetry_main_output_dir = '%s/%s' % (paleobathymetry_main_output_dir, date)
+else:
+    paleobathymetry_main_output_dir = '%s' % (paleobathymetry_main_output_dir)
+
+output_dir = '%s/continent_contouring' % (paleobathymetry_main_output_dir)
+
+os.makedirs(output_dir, exist_ok=True)
 
 #############################
 # Start of input parameters #
 #############################
 
-# Location of Merdith et al (2021) 1Ga plate model.
-model_dir = os.path.join('models', 'Merdith_etal_2021_Published')
+# Location of plate model.
+model_dir = plate_model_dir
 
 # Rotation files (relative to input directory).
-rotation_features = [pygplates.FeatureCollection(os.path.join(model_dir, file)) for file in (
-    '1000_0_rotfile_Merdith_et_al.rot',
-)]
+rotation_features = rotation_filenames
 
 # The reference frame to generate the output files relative to.
-anchor_plate_id = 0
+anchor_plate_id = anchor_plate_id
 
 # Topology features (absolute file paths).
 #
 # Only include those GPML files that are used for topologies.
-topology_features = [pygplates.FeatureCollection(os.path.join(model_dir, file)) for file in (
-    '250-0_plate_boundaries_Merdith_et_al.gpml',
-    '410-250_plate_boundaries_Merdith_et_al.gpml',
-    '1000-410-Convergence_Merdith_et_al.gpml',
-    '1000-410-Divergence_Merdith_et_al.gpml',
-    '1000-410-Topologies_Merdith_et_al.gpml',
-    '1000-410-Transforms_Merdith_et_al.gpml',
-    'TopologyBuildingBlocks_Merdith_et_al.gpml',
-)]
+topology_features = topology_filenames
 
 # Continent polygon features (absolute file paths).
-continent_features = [pygplates.FeatureCollection(os.path.join(model_dir, file)) for file in (
-    'shapes_continents_Merdith_et_al.gpml',
-    'shapes_cratons_Merdith_et_al.gpml',
-)]
-
+continent_features = [continents_file, cratons_file]
+# print(continent_features)
 # Time range.
-start_time = 0
-end_time = 1000
-time_interval = 1
+start_time = min_time
+end_time = max_time
+time_interval = time_step
 times = np.arange(start_time, end_time + 0.5 * time_interval, time_interval)
 
 # Use all CPUs.
@@ -57,7 +132,7 @@ times = np.arange(start_time, end_time + 0.5 * time_interval, time_interval)
 #
 #use_all_cpus = False
 #use_all_cpus = 4
-use_all_cpus = True
+use_all_cpus = num_cpus
 
 # Maximum distance of an active margin from a subduction zone.
 #
@@ -201,8 +276,8 @@ def find_passive_margins(
     continent_mask, contoured_continents = continent_contouring.get_continent_mask_and_contoured_continents(time)
 
     # Write out the continent mask as NetCDF.
-    #
-    continent_mask_filename = 'continent_mask_{}.nc'.format(time)
+    
+    continent_mask_filename = '%s/continent_mask_%s.nc' % (output_dir, time)
     # Note that we need to convert the boolean mask grid to a non-boolean number type for NetCDF (and it seems floating-point for gplately).
     continent_mask_grid = continent_mask.astype('float')
     gplately.grids.write_netcdf_grid(continent_mask_filename, continent_mask_grid)
@@ -234,13 +309,13 @@ def find_passive_margins(
         passive_margin_features.append(passive_margin_feature)
 
     # Save continent contours to GPML.
-    pygplates.FeatureCollection(continent_contour_features).write('continent_contour_features_{}.gpml'.format(time))
+    pygplates.FeatureCollection(continent_contour_features).write('%s/continent_contour_features_%s.gpml' % (output_dir, time))
 
     # Save passive margins to GPML.
-    pygplates.FeatureCollection(passive_margin_features).write('passive_margin_features_{}.gpml'.format(time))
+    pygplates.FeatureCollection(passive_margin_features).write('%s/passive_margin_features_%s.gpml' % (output_dir, time))
 
     # Save subducton zone segments to GPML (for debugging).
-    pygplates.FeatureCollection(subduction_zone_features).write('subduction_zone_features_{}.gpml'.format(time))
+    pygplates.FeatureCollection(subduction_zone_features).write('%s/subduction_zone_features_%s.gpml' % (output_dir, time))
 
 
 def _find_passive_margin_geometries_on_contour(
@@ -293,6 +368,8 @@ def _find_passive_margin_geometries_on_contour(
 
 if __name__ == '__main__':
     
+    print('... output to %s:' % output_dir)
+
     if use_all_cpus:
     
         # If 'use_all_cpus' is a bool (and therefore must be True) then use all available CPUs...
@@ -323,29 +400,29 @@ if __name__ == '__main__':
     passive_margin_features = []
     subduction_zone_features = []
     for time in times:
-        continent_contour_filename = 'continent_contour_features_{}.gpml'.format(time)
+        continent_contour_filename = '%s/continent_contour_features_%s.gpml' % (output_dir, time)
         continent_contour_features.extend(pygplates.FeatureCollection(continent_contour_filename))
         # Remove temporary file at current 'time'.
         if os.access(continent_contour_filename, os.R_OK):
             os.remove(continent_contour_filename)
         
-        passive_margin_filename = 'passive_margin_features_{}.gpml'.format(time)
+        passive_margin_filename = '%s/passive_margin_features_%s.gpml' % (output_dir, time)
         passive_margin_features.extend(pygplates.FeatureCollection(passive_margin_filename))
         # Remove temporary file at current 'time'.
         if os.access(passive_margin_filename, os.R_OK):
             os.remove(passive_margin_filename)
         
-        subduction_zone_filename = 'subduction_zone_features_{}.gpml'.format(time)
+        subduction_zone_filename = '%s/subduction_zone_features_%s.gpml' % (output_dir, time)
         subduction_zone_features.extend(pygplates.FeatureCollection(subduction_zone_filename))
         # Remove temporary file at current 'time'.
         if os.access(subduction_zone_filename, os.R_OK):
             os.remove(subduction_zone_filename)
     
     # Save ALL continent contours to GPMLZ.
-    pygplates.FeatureCollection(continent_contour_features).write('continent_contour_features.gpmlz')
+    pygplates.FeatureCollection(continent_contour_features).write('%s/continent_contour_features.gpmlz' % output_dir)
     
     # Save ALL passive margins to GPMLZ.
-    pygplates.FeatureCollection(passive_margin_features).write('passive_margin_features.gpmlz')
+    pygplates.FeatureCollection(passive_margin_features).write('%s/passive_margin_features.gpmlz' % output_dir)
 
     # Save ALL subducton zone segments to GPMLZ.
-    pygplates.FeatureCollection(subduction_zone_features).write('subduction_zone_features.gpmlz')
+    pygplates.FeatureCollection(subduction_zone_features).write('%s/subduction_zone_features.gpmlz' % output_dir)
