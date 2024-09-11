@@ -77,7 +77,7 @@ try:
     
     # running parameters
     num_cpus = PARAMS["Parameters"]["number_of_cpus"] # number of cpus to use. Reduce if required!
-    max_memory_usage_in_gb = PARAMS["Parameters"]["max_memory_usage_in_gb_sedthickness"]
+    max_memory_usage_in_gb = PARAMS["SedimentThicknessWorfkowParameters"]["max_memory_usage_in_gb_sedthickness"]
 
 except IndexError:
     print('*** No yaml file given. Make sure you specify it ***')
@@ -181,9 +181,9 @@ continent_exclusion_area_threshold_steradians = continent_exclusion_area_thresho
 #       So 1.0 radian is approximately 6371 km (where Earth radius is 6371 km).
 #       Also 1.0 degree is approximately 110 km.
 #
-#continent_separation_distance_threshold_kms = 0
+continent_separation_distance_threshold_kms = 0
 #continent_separation_distance_threshold_radians = continent_separation_distance_threshold_kms / pygplates.Earth.mean_radius_in_kms
-continent_separation_distance_threshold_radians = continent_contours.DEFAULT_CONTINENT_SEPARATION_DISTANCE_THRESHOLD_RADIANS
+# continent_separation_distance_threshold_radians = continent_contours.DEFAULT_CONTINENT_SEPARATION_DISTANCE_THRESHOLD_RADIANS
 
 # Optional parameter specifying a distance (in radians) to expand contours ocean-ward - this also
 # ensures small gaps between continents are ignored during contouring.
