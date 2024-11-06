@@ -70,9 +70,9 @@ try:
     lat_max = PARAMS["GridParameters"]["lat_max"]
 
     # --- time parameters
-    min_time = int(PARAMS["TimeParameters"]["time_min"])           # Not truly a min_time, - parts 1 and 3 require a 0 Ma shapefile
+    min_time = int(PARAMS["SedimentThicknessWorfkowParameters"]["time_min_continent_contours"])           # Not truly a min_time, - parts 1 and 3 require a 0 Ma shapefile
     # oldest time to reconstruct to (will default to 0 Ma for min time)
-    max_time = int(PARAMS["TimeParameters"]["time_max"])
+    max_time = int(PARAMS["SedimentThicknessWorfkowParameters"]["time_max_continent_contours"])
     time_step = int(PARAMS["TimeParameters"]["time_step"])      # Myrs to increment age by in loop
     
     # running parameters
@@ -129,9 +129,6 @@ times = np.arange(start_time, end_time + 0.5 * time_interval, time_interval)
 # If False then use a single CPU.
 # If True then use all CPUs (cores) - and make sure you don't interrupt the process.
 # If a positive integer then use that specific number of CPUs (cores).
-#
-#use_all_cpus = False
-#use_all_cpus = 4
 use_all_cpus = num_cpus
 
 # Maximum distance of an active margin from a subduction zone.
